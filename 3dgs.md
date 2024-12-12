@@ -59,7 +59,60 @@ $$
 
 通过优化旋转矩阵和缩放矩阵，可以保持协方差矩阵的半正定。
 
-**而通过定义$R,S$以及均值$\mu$ 可得到三维空间中的所有三位高斯椭球**
+**而通过定义$R,S$以及均值$\mu$ 可得到三维空间中的所有三维高斯椭球**
+
+## Splatting
+
+3D高斯椭球是三维空间中的物体，若要生成图像，则需要将其投影到2D平面上
+
+![img](assets/v2-cdf3a43093e875558ee719131c2f24e0_r.jpg)
+
+该过程包括**camera transformation**和**projection transformation**
+
+由于projection transformation存在**非线性变换**的问题（具体见E:\note\Computer-Graphics\Transformation.md），再论文中使用**Jocobin Matrix**来近似
+
+则协方差变换过程为:
+$$
+\sum'=JW\sum W^{T}J^{T}
+$$
+其中$W$为$M_{cam}$,$J$为雅可比矩阵。
+
+## Fast Differentiable Rasterizer
+
+为了加速渲染，3DGS选择了Tile-based rasterization,将image切成了16*16的tile,每个tile独立计算颜色值，最后多个tile拼成image的颜色
+
+考虑到每个3DGS投影过程中可能会投影到多个tile，处理方法为如果一个高斯椭圆与多个tile相交，就实例化多次Gaussian,每个Gaussian instance 都会得到一个结合 view space depth和tile ID得到的key。基于这些key,使用single fast GPU Radix sort进行排序，最后对每个tile分别进行 **Alpha Blending**,计算像素颜色值得到图像。
+
+![img](assets/v2-1b32176ceb1f0ad1da2938724b195c42_r.jpg)
+
+![img](assets/v2-5c1f8b2a8bc3e18c6dddca658e9d2a07_r.jpg)
+
+## Initialization
+
+使用SFM算法来从输入图像中得到一组点云，算法的基本思路是利用多张包含相同场景不同部分的图像，通过追踪图像中的共同特征，估计出相机的运动路径（即相机的外参，包括位置和平移）以及场景的三维点云结构。3DGS利用从SFM算法中得到的初始点云进行初始化，即将每个点云转换为3D高斯椭球。
+
+## Optimization
+
+通过对比同一视角下，模型生成的图片与实际的训练集图片来计算损失函数
+$$
+\mathcal {L}=(1-\lambda)\mathcal {L}_{1}+\lambda\mathcal {L}_{D-SSIM}
+$$
 
 
+原论文中$\lambda=0.2$
 
+使用**随机梯度下降法**迭代 **Mean、Covariance Matrix、$\alpha$、color**
+
+## Adaptive Densification
+
+使用SFM算法初始化一系列稀疏点之后，Adaptive Densification方法可以动态调整3D Gaussians的数量和密度。
+
+每100次迭代densify一次，并移除透明度低于$\epsilon_{\alpha}$的高斯椭球。
+
+对于重建不足的情况，对高斯椭球进行克隆
+
+对于过度重建的情况，对高斯椭球进行分割
+
+**![image-20241212120942349](assets/image-20241212120942349.png)**
+
+![image-20241212120548653](assets/image-20241212120548653.png)

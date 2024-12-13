@@ -79,7 +79,7 @@ $$
 
 ## Fast Differentiable Rasterizer
 
-为了加速渲染，3DGS选择了Tile-based rasterization,将image切成了16*16的tile,每个tile独立计算颜色值，最后多个tile拼成image的颜色
+为了加速渲染，3DGS选择了Tile-based rasterization,将image切成了16*16的tile,每个tile独立计算颜色值，最后多个tile拼成image的颜色。
 
 考虑到每个3DGS投影过程中可能会投影到多个tile，处理方法为如果一个高斯椭圆与多个tile相交，就实例化多次Gaussian,每个Gaussian instance 都会得到一个结合 view space depth和tile ID得到的key。基于这些key,使用single fast GPU Radix sort进行排序，最后对每个tile分别进行 **Alpha Blending**,计算像素颜色值得到图像。
 
@@ -87,9 +87,39 @@ $$
 
 ![img](assets/v2-5c1f8b2a8bc3e18c6dddca658e9d2a07_r.jpg)
 
+快速光栅化的算法流程如下所示：
+
+![image-20241213115852162](assets/image-20241213115852162.png)
+
+**point-based rending**过程类似于Nerf,通过混合重叠在像素上的N个有序高斯椭球来计算像素的颜色
+$$
+C=\sum_{i\in N}c_{i}\alpha_{i}\prod_{j=1}^{i-1}(1-\alpha_{j})
+$$
+$C$代表每个点的输出颜色,表示在该像素位置上，所有高斯椭球的颜色经过透明度混合后的结果。
+
+$\alpha_{i}$表示第i个高斯椭球的透明度。
+
+$\prod_{j=1}^{i-1}(1-\alpha_{j})$表示光线从前$i-1$个高斯椭球穿透的程度。
+
 ## Initialization
 
 使用SFM算法来从输入图像中得到一组点云，算法的基本思路是利用多张包含相同场景不同部分的图像，通过追踪图像中的共同特征，估计出相机的运动路径（即相机的外参，包括位置和平移）以及场景的三维点云结构。3DGS利用从SFM算法中得到的初始点云进行初始化，即将每个点云转换为3D高斯椭球。
+
+## Adaptive Densification
+
+使用SFM算法初始化一系列稀疏点之后，Adaptive Densification方法可以动态调整3D Gaussians的数量和密度。
+
+每100次迭代会判断点云的分布是否合理，
+
+1.移除透明度低于$\epsilon_{\alpha}$或离相机过近的高斯椭球(pruning)
+
+2.基于梯度判断重构情况(densification)
+
+对于重建不足的情况，对高斯椭球进行克隆（方差很小）
+
+对于过度重建的情况，对高斯椭球进行分割（方差很大）
+
+**![image-20241212120942349](assets/image-20241212120942349.png)**
 
 ## Optimization
 
@@ -103,16 +133,9 @@ $$
 
 使用**随机梯度下降法**迭代 **Mean、Covariance Matrix、$\alpha$、color**
 
-## Adaptive Densification
-
-使用SFM算法初始化一系列稀疏点之后，Adaptive Densification方法可以动态调整3D Gaussians的数量和密度。
-
-每100次迭代densify一次，并移除透明度低于$\epsilon_{\alpha}$的高斯椭球。
-
-对于重建不足的情况，对高斯椭球进行克隆
-
-对于过度重建的情况，对高斯椭球进行分割
-
-**![image-20241212120942349](assets/image-20241212120942349.png)**
+下图为算法的整体流程
 
 ![image-20241212120548653](assets/image-20241212120548653.png)
+
+
+

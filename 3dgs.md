@@ -131,7 +131,7 @@ $$
 
 原论文中$\lambda=0.2$
 
-使用**随机梯度下降法**迭代 **Mean、Covariance Matrix、$\alpha$、color**
+使用**随机梯度下降法**迭代 **Mean、Covariance Matrix、$\alpha$、Color**
 
 下图为算法的整体流程
 
